@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { size: A4 landscape; margin: 1.2cm; }
+        body {
+            font-family: "David", "Arial", sans-serif;
+            direction: rtl;
+            text-align: right;
+            color: #1a1a1a;
+            font-size: 11px;
+        }
+        {{ font_css|safe }}
+        .header-box { margin-bottom: 10px; border: 2px solid #222; background: #f2f2f2; padding: 8px 10px; }
+        .header-top { display: table; width: 100%; }
+        .logo-cell, .title-cell, .meta-cell { display: table-cell; vertical-align: middle; }
+        .logo-cell { width: 18%; text-align: right; }
+        .title-cell { width: 58%; text-align: center; }
+        .meta-cell { width: 24%; text-align: left; }
+        .company-logo {
+            max-height: 36px;
+            max-width: 90px;
+            object-fit: contain;
+        }
+        .header-title { margin: 0; font-size: 20px; font-weight: bold; color: #222; }
+        .header-sub { margin: 1px 0 0; font-size: 12px; }
+        .meta-line { font-size: 11px; margin: 0 0 2px; }
+        table.data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+            border: 2px solid #222;
+            table-layout: fixed;
+        }
+        table.data-table th {
+            background-color: #d3d3d3;
+            border: 1px solid #222;
+            padding: 5px 3px;
+            font-weight: bold;
+            font-size: 10px;
+        }
+        table.data-table td {
+            border: 1px solid #666;
+            padding: 4px 3px;
+            text-align: center;
+            font-size: 10px;
+        }
+        table.data-table tr.sabbath { background-color: #efefef; }
+        .summary-table {
+            margin-top: 10px;
+            width: 38%;
+            float: left;
+            border-collapse: collapse;
+            border: 2px solid #222;
+        }
+        .summary-table td { border: 1px solid #666; padding: 4px; font-size: 10px; }
+        .summary-table .label { background: #e0e0e0; font-weight: bold; width: 58%; }
+        .clearfix { clear: both; }
+    </style>
+</head>
+<body>
+    <div class="header-box">
+        <div class="header-top">
+            <div class="logo-cell">
+                {% if metadata.company_logo_path %}
+                <img class="company-logo" src="{{ metadata.company_logo_path }}" alt="Company Logo">
+                {% endif %}
+            </div>
+            <div class="title-cell">
+                <h2 class="header-title">דוח נוכחות חודשי</h2>
+                <p class="header-sub">{{ metadata.company_name or "נ.ע. הנשר" }}</p>
+            </div>
+            <div class="meta-cell">
+                <p class="meta-line">שם עובד: {{ metadata.employee_name or "-" }}</p>
+                <p class="meta-line">חודש: {{ metadata.report_period or "-" }}</p>
+            </div>
+        </div>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>שבת</th>
+                <th>150%</th>
+                <th>125%</th>
+                <th>100%</th>
+                <th>סה"כ</th>
+                <th>הפסקה</th>
+                <th>יציאה</th>
+                <th>כניסה</th>
+                <th>מקום ע.נ</th>
+                <th>יום</th>
+                <th>תאריך</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in entries %}
+            <tr class="{{ 'sabbath' if 'שבת' in entry.day else '' }}">
+                <td>{{ entry.overtime_150 if 'שבת' in entry.day else "0.00" }}</td>
+                <td>{{ entry.overtime_150 }}</td>
+                <td>{{ entry.overtime_125 }}</td>
+                <td>{{ regular_hours_by_row.get(loop.index0, "0.00") }}</td>
+                <td>{{ entry.total_hours }}</td>
+                <td>{{ entry.break_duration }}</td>
+                <td>{{ entry.exit_time }}</td>
+                <td>{{ entry.entry_time }}</td>
+                <td>{{ entry.location }}</td>
+                <td>{{ entry.day }}</td>
+                <td>{{ entry.date }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <table class="summary-table">
+        <tr><td class="label">ימים:</td><td>{{ totals.total_days }}</td></tr>
+        <tr><td class="label">סה"כ שעות:</td><td>{{ "%.2f"|format(totals.total_hours) }}</td></tr>
+        <tr><td class="label">שעות 100%:</td><td>{{ "%.2f"|format(monthly_regular_hours) }}</td></tr>
+        <tr><td class="label">שעות 125%:</td><td>{{ "%.2f"|format(monthly_ot_125) }}</td></tr>
+        <tr><td class="label">שעות 150%:</td><td>{{ "%.2f"|format(monthly_ot_150) }}</td></tr>
+        <tr><td class="label">מחיר לשעה:</td><td>₪{{ hourly_rate_display }}</td></tr>
+        <tr><td class="label">סה"כ לתשלום:</td><td>₪{{ "%.2f"|format(totals.total_pay) }}</td></tr>
+    </table>
+    <div class="clearfix"></div>
+</body>
+</html>
