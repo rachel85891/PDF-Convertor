@@ -17,6 +17,7 @@ class AttendanceEntry:
     overtime_125: str
     overtime_150: str
     location: str
+    comments: str = ""
 
 
 @dataclass(slots=True)
@@ -49,3 +50,4 @@ class AttendanceReport:
     entries: list[AttendanceEntry] = field(default_factory=list)
     employee_metadata: EmployeeMetadata = field(default_factory=EmployeeMetadata)
     totals: ReportTotals = field(default_factory=ReportTotals)
+    source_pdf_path: str = ""

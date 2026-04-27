@@ -3,10 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timedelta
-from hashlib import sha256
 from random import Random
 import re
+import secrets
 from decimal import Decimal, InvalidOperation
+import calendar
 
 from core.entities import AttendanceEntry, AttendanceReport
 
@@ -17,7 +18,7 @@ _DATE_PATTERN = re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b")
 
 
 class ReliableVariationService:
-    """Apply deterministic, realistic time variations per attendance row."""
+    """Apply realistic time variations per attendance row (randomized on each run)."""
 
     def __init__(
         self,
@@ -35,13 +36,14 @@ class ReliableVariationService:
 
     def apply_variations(self, report: AttendanceReport) -> AttendanceReport:
         """
-        Shift entry/exit times with deterministic random margins (default: -15..+15).
-        Seed is derived from employee name + report month/year.
+        Shift entry/exit times with random margins (default: -15..+15).
+        A new random sequence is used on every run so day counts and hours differ each time.
         """
         varied_report = deepcopy(report)
-        employee_name = varied_report.employee_metadata.employee_name.strip()
         report_period = self._resolve_report_period(varied_report)
-        base_rng = Random(self._build_seed(employee_name, report_period))
+        base_rng = Random(int.from_bytes(secrets.token_bytes(16), "big"))
+        if not varied_report.entries:
+            varied_report.entries = self._build_synthetic_month_entries(varied_report, report_period, base_rng)
 
         varied_entries: list[AttendanceEntry] = []
         for entry in varied_report.entries:
@@ -54,6 +56,63 @@ class ReliableVariationService:
 
         varied_report.entries = varied_entries
         return varied_report
+
+    def _build_synthetic_month_entries(
+        self,
+        report: AttendanceReport,
+        report_period: str,
+        rng: Random,
+    ) -> list[AttendanceEntry]:
+        month, year = self._parse_month_year(report_period)
+        _, last_day = calendar.monthrange(year, month)
+
+        weekdays = [
+            day for day in range(1, last_day + 1)
+            if datetime(year, month, day).weekday() != 5  # 5 == Saturday
+        ]
+        if not weekdays:
+            return []
+
+        min_workdays = max(8, int(len(weekdays) * 0.35))
+        max_workdays = min(len(weekdays), int(len(weekdays) * 0.82))
+        if max_workdays < min_workdays:
+            max_workdays = min_workdays
+        chosen_count = rng.randint(min_workdays, max_workdays)
+        worked_days = sorted(rng.sample(weekdays, chosen_count))
+
+        sample_location = next((entry.location for entry in report.entries if entry.location.strip()), "")
+        entries: list[AttendanceEntry] = []
+        for day in worked_days:
+            current_date = datetime(year, month, day)
+            day_name_he = self._weekday_hebrew_name(current_date.weekday())
+            date_text = f"{day:02d}/{month:02d}/{year}"
+
+            start_minutes = rng.randint(6 * 60 + 45, 9 * 60 + 30)
+            shift_minutes = rng.randint(8 * 60, 11 * 60)
+            break_minutes = rng.choice((30, 45, 60))
+            end_minutes = start_minutes + shift_minutes
+
+            entry_time = self._minutes_to_time(start_minutes)
+            exit_time = self._minutes_to_time(end_minutes)
+            break_duration = self._minutes_to_time(break_minutes)
+            work_hours = max(Decimal(shift_minutes - break_minutes) / Decimal(60), Decimal("0"))
+
+            entries.append(
+                AttendanceEntry(
+                    date=date_text,
+                    day=day_name_he,
+                    entry_time=entry_time,
+                    exit_time=exit_time,
+                    break_duration=break_duration,
+                    total_hours=f"{work_hours.quantize(Decimal('0.01')):.2f}",
+                    overtime_125="0.00",
+                    overtime_150="0.00",
+                    location=sample_location,
+                    comments="",
+                )
+            )
+
+        return entries
 
     def _vary_single_entry(
         self,
@@ -95,12 +154,6 @@ class ReliableVariationService:
     def _is_time(value: str) -> bool:
         return bool(_TIME_PATTERN.match(value.strip()))
 
-    @staticmethod
-    def _build_seed(employee_name: str, report_period: str) -> int:
-        raw = f"{employee_name}|{report_period}"
-        digest = sha256(raw.encode("utf-8")).hexdigest()
-        return int(digest[:16], 16)
-
     def _resolve_report_period(self, report: AttendanceReport) -> str:
         period = report.employee_metadata.report_period.strip()
         period_match = _PERIOD_PATTERN.search(period)
@@ -119,7 +172,39 @@ class ReliableVariationService:
             if len(year) == 2:
                 year = f"20{year}"
             return f"{month}/{year}"
-        return "00/0000"
+        today = datetime.now()
+        return f"{today.month:02d}/{today.year}"
+
+    @staticmethod
+    def _parse_month_year(report_period: str) -> tuple[int, int]:
+        parts = re.split(r"[/-]", report_period.strip())
+        if len(parts) == 2 and all(part.isdigit() for part in parts):
+            month = int(parts[0])
+            year = int(parts[1])
+            if 1 <= month <= 12 and year > 0:
+                return month, year
+        today = datetime.now()
+        return today.month, today.year
+
+    @staticmethod
+    def _weekday_hebrew_name(weekday: int) -> str:
+        names = {
+            0: "יום שני",
+            1: "יום שלישי",
+            2: "יום רביעי",
+            3: "יום חמישי",
+            4: "יום שישי",
+            5: "שבת",
+            6: "יום ראשון",
+        }
+        return names.get(weekday, "")
+
+    @staticmethod
+    def _minutes_to_time(total_minutes: int) -> str:
+        total_minutes = total_minutes % (24 * 60)
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        return f"{hours:02d}:{minutes:02d}"
 
     def _is_rest_day(self, entry: AttendanceEntry) -> bool:
         day_text = entry.day.strip()

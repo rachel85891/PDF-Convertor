@@ -92,6 +92,7 @@ def main() -> int:
         return 4
 
     print(f"Parsed entries: {len(parsed_report.entries)}")
+    parsed_report.source_pdf_path = str(input_pdf)
 
     variation_service = ReliableVariationService()
     varied_report = variation_service.apply_variations(parsed_report)

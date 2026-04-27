@@ -29,12 +29,16 @@ class _ParserUtilities:
         "overtime_125": ("125", "125%"),
         "overtime_150": ("150", "150%"),
     }
+    # Type B "כרטיס עובד": summary on top + 6-column grid (תאריך, יום בשבוע, כניסה, יציאה, סה"כ שעות, הערות)
     _TYPE_B_HEADERS: dict[str, tuple[str, ...]] = {
         "date": ("תאריך", "date"),
-        "day": ("יום", "day"),
-        "entry_time": ("כניסה", "שעת כניסה", "entry"),
-        "exit_time": ("יציאה", "שעת יציאה", "exit"),
-        "total_hours": ('סה"כ', "סהכ", "total"),
+        "day": ("יום בשבוע", "יום", "day"),
+        "entry_time": ("שעת כניסה", "כניסה", "entry"),
+        "exit_time": ("שעת יציאה", "יציאה", "exit"),
+        "total_hours": ('סה"כ שעות', "סהכ שעות", 'סה"כ', "סהכ", "total"),
+        "comments": ("הערות", "remarks"),
+        "break_duration": ("הפסקה", "break"),
+        "location": ('מקום ע"נ', "מקום", "location"),
     }
     _SUMMARY_MARKERS: tuple[str, ...] = ("סה\"כ", "סהכ", "ימים", "שעות", "לתשלום", "בונוס", "נסיעות")
 
@@ -161,7 +165,14 @@ class _ParserUtilities:
         row_text = " ".join(row)
         if not _DATE_PATTERN.search(row_text):
             return False
-        return not any(marker in row_text for marker in cls._SUMMARY_MARKERS)
+        if any(marker in row_text for marker in cls._SUMMARY_MARKERS):
+            return False
+        if any(
+            marker in row_text
+            for marker in ("ימי עבודה", "מחיר לשעה", "שם העובד", "כרטיס עובד", "סה\"כ ימי", "סהכ ימי")
+        ):
+            return False
+        return True
 
     @classmethod
     def _extract_entry(cls, row: list[str], col_map: dict[str, int], supports_overtime: bool) -> AttendanceEntry | None:
@@ -191,6 +202,7 @@ class _ParserUtilities:
 
         overtime_125 = cls._value_from_row(row, col_map, "overtime_125") if supports_overtime else "0.00"
         overtime_150 = cls._value_from_row(row, col_map, "overtime_150") if supports_overtime else "0.00"
+        comments_val = cls._value_from_row(row, col_map, "comments") if "comments" in col_map else ""
 
         return AttendanceEntry(
             date=parsed_date,
@@ -202,6 +214,7 @@ class _ParserUtilities:
             overtime_125=overtime_125 or "0.00",
             overtime_150=overtime_150 or "0.00",
             location=cls._value_from_row(row, col_map, "location"),
+            comments=comments_val,
         )
 
     @classmethod
@@ -345,8 +358,14 @@ class TypeBParser(BaseParser, _ParserUtilities):
             if entry is not None:
                 entries.append(entry)
 
+        metadata = self._build_metadata(preview_text, default_company_name="")
+        if not metadata.report_period.strip():
+            card_m = re.search(r"כרטיס\s*עובד\s*לחודש[:\s]*([^\n\r]+)", full_text)
+            if card_m:
+                metadata.report_period = card_m.group(1).strip()
+
         return AttendanceReport(
             entries=entries,
-            employee_metadata=self._build_metadata(preview_text, default_company_name=""),
+            employee_metadata=metadata,
             totals=self._build_totals(full_text, entries),
         )

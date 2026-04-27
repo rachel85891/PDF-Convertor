@@ -8,7 +8,7 @@ from typing import Callable
 import pdfplumber
 
 from core.interfaces import BaseGenerator, BaseParser
-from generators.jinja_renderer import TypeAGenerator, TypeBGenerator
+from generators.pdf_overlay_generator import SameLayoutPdfGenerator
 from services.parsing_service import TypeAParser, TypeBParser
 
 ReportDetector = Callable[[str], bool]
@@ -40,6 +40,12 @@ class ReportProcessorFactory:
 
     @classmethod
     def create(cls, file_path: str) -> ReportProcessor:
+        # Naming convention (e.g. a_r_*.pdf vs n_r_*_n.pdf) must win before text heuristics,
+        # otherwise Type A's loose rules or "best parser" can steal Type B files.
+        hinted = cls._create_by_filename_hint(file_path)
+        if hinted is not None:
+            return hinted
+
         preview = cls._read_pdf_text(file_path)
         for detector, parser_cls, generator_cls, report_type in cls._registry:
             if detector(preview):
@@ -51,9 +57,6 @@ class ReportProcessorFactory:
         fallback = cls._create_by_best_parser(str(Path(file_path)))
         if fallback is not None:
             return fallback
-        name_guess = cls._create_by_filename_hint(file_path)
-        if name_guess is not None:
-            return name_guess
         raise ValueError(
             f"Unsupported report format: {file_path}. "
             "Could not detect text signature and fallback parsing found no attendance rows."
@@ -86,6 +89,11 @@ class ReportProcessorFactory:
 
     @classmethod
     def _create_by_best_parser(cls, file_path: str) -> ReportProcessor | None:
+        preview = cls._read_pdf_text(file_path)
+        # If the PDF looks like Type B, never pick Type A just because it parsed more rows.
+        if _type_b_fingerprint(preview):
+            return cls.create_for_type("type_b")
+
         best_result: tuple[int, type[BaseParser], type[BaseGenerator], str] | None = None
         for _, parser_cls, generator_cls, report_type in cls._registry:
             try:
@@ -117,9 +125,33 @@ class ReportProcessorFactory:
         return None
 
 
-def _is_type_a(preview_text: str) -> bool:
+def _normalize_for_detection(text: str) -> str:
+    lowered = text.lower()
+    # Keep only alphanumeric Hebrew/Latin chars to make matching robust to PDF punctuation noise.
+    return re.sub(r"[^0-9a-zא-ת]+", "", lowered)
+
+
+def _type_b_fingerprint(preview_text: str) -> bool:
+    """Heuristics for Type B (employee-card style). Kept separate from Type A fallbacks."""
     normalized = _normalize_for_detection(preview_text)
-    # Accept common extraction variants: punctuation removed, spacing changes, and longer company wording.
+    if "כרטיסעובד" in normalized:
+        return True
+    # Subtitle fragments: "מפורט עם שעות נוספות"
+    if "עםשעותנוספות" in normalized or "מפורטעםשעות" in normalized:
+        return True
+    if "מפורט" in normalized and "שעותנוספות" in normalized:
+        return True
+    if "מפורט" in normalized and "נוספות" in normalized and "נוכחות" in normalized:
+        return True
+    if "דוחנוכחות" in normalized and "מפורט" in normalized:
+        return True
+    return False
+
+
+def _is_type_a(preview_text: str) -> bool:
+    if _type_b_fingerprint(preview_text):
+        return False
+    normalized = _normalize_for_detection(preview_text)
     company_marker_match = any(
         marker in normalized
         for marker in (
@@ -130,22 +162,20 @@ def _is_type_a(preview_text: str) -> bool:
     )
     if company_marker_match:
         return True
-
-    # Fallback: identify Type A by its overtime/break columns.
-    header_hints = ("125", "150", "הפסקה")
-    return all(hint in preview_text for hint in header_hints)
+    if "דוחנוכחותחודשי" in normalized or (
+        "חודשי" in normalized and "נוכחות" in normalized and "מפורט" not in normalized
+    ):
+        return True
+    # Do NOT use generic 125%/150%/break columns here — Type B PDFs contain them too and would
+    # be misclassified as Type A when Type B fingerprint text is missing from extraction.
+    return False
 
 
 def _is_type_b(preview_text: str) -> bool:
-    normalized = _normalize_for_detection(preview_text)
-    return "כרטיסעובד" in normalized
+    return _type_b_fingerprint(preview_text)
 
 
-def _normalize_for_detection(text: str) -> str:
-    lowered = text.lower()
-    # Keep only alphanumeric Hebrew/Latin chars to make matching robust to PDF punctuation noise.
-    return re.sub(r"[^0-9a-zא-ת]+", "", lowered)
-
-
-ReportProcessorFactory.register(_is_type_a, TypeAParser, TypeAGenerator, "type_a")
-ReportProcessorFactory.register(_is_type_b, TypeBParser, TypeBGenerator, "type_b")
+# Type B must be registered before Type A: Type A's fallback detector matches any PDF that
+# contains 125%/150%/break columns, which Type B reports also include.
+ReportProcessorFactory.register(_is_type_b, TypeBParser, lambda: SameLayoutPdfGenerator("type_b"), "type_b")
+ReportProcessorFactory.register(_is_type_a, TypeAParser, lambda: SameLayoutPdfGenerator("type_a"), "type_a")
