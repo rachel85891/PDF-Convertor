@@ -1,0 +1,25 @@
+﻿[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "attendance-report-generator"
+version = "0.1.0"
+description = "Attendance report parser and generator"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pdfplumber",
+  "pymupdf",
+  "jinja2",
+  "weasyprint",
+]
+
+[project.scripts]
+attendance-report = "attendance_report.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

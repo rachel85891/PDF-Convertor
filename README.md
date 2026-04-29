@@ -12,7 +12,7 @@ Python CLI tool for parsing attendance PDFs, applying deterministic time variati
 ## Installation
 
 ```bash
-pip install pdfplumber Jinja2 WeasyPrint
+pip install .
 ```
 
 ## Hebrew / UTF-8 Notes
@@ -28,31 +28,31 @@ pip install pdfplumber Jinja2 WeasyPrint
 Basic usage:
 
 ```bash
-python main.py "input_files_example/a_r_9.pdf"
+attendance-report "input_files_example/a_r_9.pdf"
 ```
 
 Custom output path:
 
 ```bash
-python main.py "input_files_example/n_r_5_n.pdf" --output "output_pdfs/report_n5.pdf"
+attendance-report "input_files_example/n_r_5_n.pdf" --output "output_pdfs/report_n5.pdf"
 ```
 
 Generate HTML instead of PDF:
 
 ```bash
-python main.py "input_files_example/a_r_25.pdf" --output "output_pdfs/report_a25.html"
+attendance-report "input_files_example/a_r_25.pdf" --output "output_pdfs/report_a25.html"
 ```
 
 Override hourly rate for pay calculation:
 
 ```bash
-python main.py "input_files_example/n_r_10_n.pdf" --hourly-rate 32.50
+attendance-report "input_files_example/n_r_10_n.pdf" --hourly-rate 32.50
 ```
 
 Force report type when auto-detection fails:
 
 ```bash
-python main.py "input_files_example/a_r_9.pdf" --report-type type_a
+attendance-report "input_files_example/a_r_9.pdf" --report-type type_a
 ```
 
 ## Processing Flow

@@ -1,4 +1,0 @@
-pdfplumber
-Jinja2
-weasyprint
-pymupdf

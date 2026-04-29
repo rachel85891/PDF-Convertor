@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { size: A4 portrait; margin: 1.2cm; }
+        body {
+            font-family: "David", "Arial", sans-serif;
+            direction: rtl;
+            color: #111;
+            font-size: 11px;
+            margin: 0;
+        }
+        {{ font_css|safe }}
+        .page {
+            width: 74%;
+            margin: 0 auto;
+        }
+        .summary-wrap {
+            width: 54%;
+            margin: 0 auto 10px auto;
+        }
+        .summary-title {
+            border: 1.4px solid #111;
+            background: #cfcfcf;
+            text-align: center;
+            font-weight: bold;
+            font-size: 12px;
+            line-height: 1.4;
+            margin-bottom: 2px;
+        }
+        table.summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin-bottom: 8px;
+        }
+        table.summary-table td {
+            border: 1.1px solid #111;
+            padding: 2px 4px;
+            line-height: 1.25;
+            vertical-align: middle;
+            font-size: 11px;
+        }
+        table.summary-table td.label {
+            width: 62%;
+            background: #ececec;
+            font-weight: bold;
+        }
+        .employee-strip {
+            border: 1.4px solid #111;
+            background: #cfcfcf;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+        table.data-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        table.data-table th {
+            background: #efefef;
+            border: 1.1px solid #111;
+            padding: 3px 2px;
+            font-weight: bold;
+            text-align: center;
+            line-height: 1.2;
+        }
+        table.data-table td {
+            border: 1.1px solid #111;
+            padding: 2px 2px;
+            text-align: center;
+            line-height: 1.2;
+        }
+        table.data-table tr.week-break td {
+            background: #e4e4e4;
+            height: 7px;
+            padding: 0;
+        }
+        .col-date { width: 17%; }
+        .col-day { width: 16%; }
+        .col-in { width: 14%; }
+        .col-out { width: 14%; }
+        .col-total { width: 14%; }
+        .col-notes { width: 25%; }
+        .money {
+            direction: ltr;
+            unicode-bidi: embed;
+            display: inline-block;
+        }
+        .muted {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="summary-wrap">
+            <div class="summary-title">סה"כ נוכחות לחודש</div>
+            <table class="summary-table">
+                <tr><td class="label">ימי עבודה</td><td>{{ totals.total_days }}</td></tr>
+                <tr><td class="label">סה"כ שעות חודשיות</td><td>{{ "%.2f"|format(totals.total_hours) }}</td></tr>
+                <tr><td class="label">מחיר לשעה</td><td class="money">₪ {{ hourly_rate_display }}</td></tr>
+                <tr><td class="label">סה"כ לתשלום</td><td class="money">₪ {{ "%.2f"|format(totals.total_pay) }}</td></tr>
+            </table>
+        </div>
+
+        <div class="employee-strip">
+            כרטיס עובד לחודש:
+            <span class="muted">{{ metadata.report_period or "-" }}</span>
+            |
+            {{ metadata.employee_name or "שם עובד" }}
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th class="col-date">תאריך</th>
+                    <th class="col-day">יום בשבוע</th>
+                    <th class="col-in">שעת כניסה</th>
+                    <th class="col-out">שעת יציאה</th>
+                    <th class="col-total">סה"כ שעות</th>
+                    <th class="col-notes">הערות</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in entries %}
+                {% set is_break = ('שישי' in entry.day) or ('שבת' in entry.day) %}
+                {% if is_break %}
+                <tr class="week-break">
+                    <td></td><td></td><td></td><td></td><td></td><td></td>
+                </tr>
+                {% endif %}
+                <tr>
+                    <td>{{ entry.date }}</td>
+                    <td>{{ entry.day or "" }}</td>
+                    <td>{{ entry.entry_time or "" }}</td>
+                    <td>{{ entry.exit_time or "" }}</td>
+                    <td>{{ entry.total_hours or "" }}</td>
+                    <td>{{ entry.comments or "" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

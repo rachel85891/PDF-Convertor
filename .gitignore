@@ -1,0 +1,6 @@
+﻿__pycache__/
+*.pyc
+.venv/
+output_pdfs/
+output_files_example/
+.idea/
